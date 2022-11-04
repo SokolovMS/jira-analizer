@@ -46,8 +46,8 @@ def fetch_issues():
             files.json_dump("{}/{}.json".format(base_dir, issue_id), issue_json)
             added += 1
 
-    logging.info("----- Fetched issues: New {}, Skipped {} -----\n".format(added, skipped))
-    logging.info("----- Saved issues: In final status {}, Not {} -----\n".format(in_final_status, not_in_final_status))
+    logging.info("----- Fetched issues: New {}, Skipped {} -----".format(added, skipped))
+    logging.info("----- Saved issues: In final status {}, Not {} -----".format(in_final_status, not_in_final_status))
     logging.info("Found statuses: {}".format(statuses))
     logging.info("Known final statuses: {}".format(config.jira_status_final))
 

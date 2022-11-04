@@ -7,7 +7,10 @@ from scripts.dates import CustomDatesEncoder
 
 
 def file_list(directory):
-    return Path(directory).iterdir()
+    if Path(directory).exists():
+        return Path(directory).iterdir()
+    else:
+        return []
 
 
 def file_exists(path):

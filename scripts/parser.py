@@ -34,27 +34,59 @@ def parse(input_json):
     result['key'] = input_json['key']
     result['status'] = input_json['fields']['status']['name']
     result['resolutiondate'] = input_json['fields']['resolutiondate']
-    result['summary'] = {
-        "analysis": {
-            "sp": None,
-            "start": None,
-            "end": None,
-            "assignee": None
-        },
-        "dev": {
-            "sp": None,
-            "start": None,
-            "end": None,
-            "assignee": None
-        },
-        "qa": {
-            "sp": None,
-            "start": None,
-            "end": None,
-            "assignee": None
-        }
-    }
+    result['name'] = input_json['fields']['summary']
 
+    changelog = get_sorted_changelog(input_json)
+    time_in_status = compute_time_in_status(changelog)
+    result['time_in_status'] = time_in_status
+
+    add_estimation_info(result, input_json)
+
+    return result
+
+
+def compute_time_in_status(changelog):
+    time_in_status = defaultdict(dict)
+    prev_status = None
+    prev_transition_date = None
+    assignee = None
+    for item in changelog:
+        # Working with 'assignee' changelog item
+        if item['field'] == "assignee":
+            assignee = item['toString']
+            update_assignee(time_in_status, prev_status, assignee)
+            continue
+
+        # Working with 'status' changelog item
+        prev_status = item['fromString']
+        curr_status = item['toString']
+        curr_transition_date = item['date']
+        date_diff = curr_transition_date - prev_transition_date if prev_transition_date else None
+
+        update_dt(time_in_status, prev_status, date_diff)
+        update_end(time_in_status, prev_status, curr_transition_date)
+
+        update_start(time_in_status, curr_status, curr_transition_date)
+        update_dt(time_in_status, curr_status, date_diff)
+        update_assignee(time_in_status, curr_status, assignee)
+
+        prev_status = curr_status
+        prev_transition_date = curr_transition_date
+
+    for key in time_in_status:
+        ass_set = time_in_status[key].get("assignee", set())
+        ass_set.discard(None)
+        time_in_status[key]["assignee"] = ass_set
+        if len(time_in_status[key]["assignee"]) == 0:
+            time_in_status[key]["assignee"] = "None"
+        elif len(time_in_status[key]["assignee"]) == 1:
+            time_in_status[key]["assignee"] = time_in_status[key]["assignee"].pop()
+        # else:
+        #     time_in_status[key]["assignee"] = time_in_status[key]["assignee"]
+    return time_in_status
+
+
+def get_sorted_changelog(input_json):
     changelog = []
     for history in input_json['changelog']['histories']:
         status_item = None
@@ -77,65 +109,52 @@ def parse(input_json):
                     "date": history['created']
                 }
 
-            if item['field'] == "Story Points":
-                result['summary']["dev"]["sp"] = item['toString']
-
         if status_item:
             changelog.append(status_item)
 
         if assignee_item:
             changelog.append(assignee_item)
-
     changelog = sorted(changelog, key=cmp_to_key(custom_compare))
-    changelog.insert(0, {
-        "field": "assignee",
-        "fromString": None,
-        "toString": next((x["fromString"] for x in changelog if x["field"] == "assignee"), None),
-        "date": next((x["date"] for x in changelog if x["date"]), None)
-    })
+    # changelog.insert(0, {
+    #     "field": "assignee",
+    #     "fromString": None,
+    #     "toString": next((x["fromString"] for x in changelog if x["field"] == "assignee"), None),
+    #     "date": next((x["date"] for x in changelog if x["date"]), None)
+    # })
+    return changelog
 
-    # TODO: ordered_changelog = sorted(data.items(), key=lambda x: datetime.strptime(x[0], '%d-%m-%Y'), reverse=True)
-    time_in_status = defaultdict(dict)
-    prev_status = None
-    assignee = None
-    for item in changelog:
-        if item['field'] == "assignee":
-            assignee = item['toString']
-            continue
 
-        if not prev_status:
-            prev_status = item['toString']
-            prev_date = item['date']
-            continue
+def update_dt(time_in_status, status, dt):
+    current_dt = time_in_status.get(status, {}).get("dt", None)
+    if current_dt:
+        time_in_status[status]["dt"] += dt
+    else:
+        time_in_status[status]["dt"] = dt
 
-        date_diff = item['date'] - prev_date
-        if prev_status in time_in_status:
-            time_in_status[prev_status]["dt"] += date_diff
-            time_in_status[prev_status]["assignee"].add(assignee)
-        else:
-            time_in_status[prev_status]["dt"] = date_diff
-            time_in_status[prev_status]["assignee"] = {assignee}
 
-        update_dev_parts(result, item)
+def update_start(time_in_status, status, date):
+    current = time_in_status.get(status, {}).get("start", None)
+    if current:
+        time_in_status[status]["start"] = min(date, current)
+    else:
+        time_in_status[status]["start"] = date
 
-        prev_status = item['toString']
-        prev_date = item['date']
 
-    for key in time_in_status:
-        ass_set = time_in_status[key]["assignee"]
-        ass_set.discard(None)
-        time_in_status[key]["assignee"] = ass_set
-        if len(time_in_status[key]["assignee"]) == 0:
-            time_in_status[key]["assignee"] = "None"
-        if len(time_in_status[key]["assignee"]) == 1:
-            time_in_status[key]["assignee"] = time_in_status[key]["assignee"].pop()
+def update_end(time_in_status, status, date):
+    current = time_in_status.get(status, {}).get("end", None)
+    if current:
+        time_in_status[status]["end"] = max(date, current)
+    else:
+        time_in_status[status]["end"] = date
 
-    result['time_in_status'] = time_in_status
 
-    if time_in_status["In Progress"] and time_in_status["In Progress"]["assignee"]:
-        result['summary']['dev']["assignee"] = time_in_status["In Progress"]["assignee"]
+def update_assignee(time_in_status, status, assignee):
+    if not status:
+        return
 
-    return result
+    current = time_in_status.get(status, {}).get("assignee", set())
+    current.add(assignee)
+    time_in_status[status]["assignee"] = current
 
 
 def custom_compare(changelog_item1, changelog_item2):
@@ -145,25 +164,14 @@ def custom_compare(changelog_item1, changelog_item2):
         return 1
 
     if changelog_item1['field'] == 'assignee':
-        return 1
-    elif changelog_item2['field'] == 'assignee':
         return -1
+    elif changelog_item2['field'] == 'assignee':
+        return 1
 
     return 0
 
 
-def update_dev_parts(result, item):
-    if item['field'] != "status":
-        return
-
-    if item['toString'] in config.statuses_inprogress_dev:
-        if not result['summary']['dev']['start']:
-            result['summary']['dev']['start'] = item['date']
-        else:
-            result['summary']['dev']['start'] = min(result['summary']['dev']['start'], item['date'])
-
-    if item['fromString'] in config.statuses_inprogress_dev:
-        if not result['summary']['dev']['end']:
-            result['summary']['dev']['end'] = item['date']
-        else:
-            result['summary']['dev']['end'] = max(result['summary']['dev']['end'], item['date'])
+def add_estimation_info(result, input_json):
+    for status in config.jira_tracked_statuses:
+        jira_estimation_field = config.jira_tracked_statuses[status]['jira_estimation_field']
+        result['time_in_status'].get(status, {})["estimation"] = input_json['fields'].get(jira_estimation_field, None)

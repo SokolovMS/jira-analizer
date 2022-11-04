@@ -1,3 +1,4 @@
+import copy
 import datetime
 import logging
 from collections import defaultdict
@@ -17,54 +18,43 @@ def gather_stats_main(start_date=None, author=None):
     logging.info("----- Gather stats: Started for start date {} and author {} -----".format(start_date, author))
 
     issues = get_issues()
-    gather_dev_stats(issues, start_date)
 
-    if start_date:
-        issues = list(filter(lambda issue: issue["resolutiondate"] is None or issue["resolutiondate"] >= start_date, issues))
+    for status in config.jira_tracked_statuses:
+        gather_stats_for_status(issues, status, start_date)
 
-    # if author:
-    #     issues = list(filter(lambda issue: issue["resolutiondate"] is None or issue["resolutiondate"] >= start_date, issues))
-
-    # short_issues = list(map(lambda issue: (issue["key"], issue["resolutiondate"]), issues))
-    # logging.info("Found {} issues: {}".format(len(short_issues), short_issues))
-
-    # In progress
-    # sp_status_time = analyze_dev(issues)
-
-    # print(sp_status_time)
     logging.info("----- Gather stats: Done -----")
 
 
-def gather_dev_stats(issues, start_date=None):
-    # dev_issues_list = list(filter(lambda issue: issue['resolutiondate'] >= start_date, issues))
-    dev_issues_list = list(filter(lambda issue: issue['summary']['dev']['end'] >= start_date, issues))
+def gather_stats_for_status(issues, status, start_date=None):
+    issues_list = list(filter(lambda i: end_is_set_and_after_search_date(i, status, start_date), issues))
+    issues_list = copy.deepcopy(issues_list)
 
-    # Если задачу начали делать задолго раньше, учтём только часть задачи, попавшую во временной интервал
-    for issue in dev_issues_list:
-        if issue['summary']['dev']['start'] < start_date:
-            curr_sp = issue['summary']['dev']['sp']
-            if not curr_sp or curr_sp == 0:
-                issue['summary']['dev']['start'] = start_date
-                continue
+    # If task was started before start date - count only part of Estimation
+    for issue in issues_list:
+        # issue['time_in_status_1'] = issue['time_in_status']
+        tis = issue['time_in_status'][status]
+        issue['time_in_status'] = {status: tis}
 
-            dt_all = issue['summary']['dev']['end'] - issue['summary']['dev']['start']
-            dt_required = issue['summary']['dev']['end'] - start_date
-            sp_new = curr_sp * dt_required / dt_all
+        if start(issue, status) < start_date:
+            curr_est = estimation(issue, status)
 
-            logging.info("Changing SP for {} from {} to {}".format(issue['key'], curr_sp, sp_new))
-            issue['summary']['dev']['sp'] = sp_new
-            issue['summary']['dev']['start'] = start_date
+            dt_all = end(issue, status) - start(issue, status)
+            dt_required = end(issue, status) - start_date
+            new_est = curr_est * dt_required / dt_all
 
-    dev_issues_list.sort(key=lambda issue: issue['summary']['dev']['start'])
-    # logging.info("Found {} dev issues: {}".format(len(dev_issues_list), dev_issues_list))
+            logging.info("Changing SP for {} from {} to {}".format(issue['key'], curr_est, new_est))
+            issue['time_in_status'][status]['estimation'] = new_est
+            issue['time_in_status'][status]['start'] = start_date
+
+    issues_list.sort(key=lambda i: start(i, status))
 
     dev_issues_dict = defaultdict(list)
-    for issue in dev_issues_list:
-        assignee = issue['summary']['dev']['assignee']
+    for issue in issues_list:
+        assignee = issue['time_in_status'][status]['assignee']
         current = {
-            'sp': issue['summary']['dev']['sp'],
-            'start': issue['summary']['dev']['start'],
-            'end': issue['summary']['dev']['end'],
+            'estimation': estimation(issue, status),
+            'start': start(issue, status),
+            'end': end(issue, status),
             'issues_count': 1,
             'issues': [issue]
         }
@@ -73,39 +63,37 @@ def gather_dev_stats(issues, start_date=None):
             dev_issues_dict[assignee] = current
         else:
             existing = dev_issues_dict[assignee]
-            existing['sp'] += current['sp']
+            existing['estimation'] += current['estimation']
             existing['start'] = min(current['start'], existing['start'])
             existing['end'] = max(current['end'], existing['end'])
             existing['issues_count'] += current['issues_count']
             existing['issues'].append(issue)
             dev_issues_dict[assignee] = existing
 
-    # logging.info("Found {} dev issues: {}".format(len(dev_issues_dict), dev_issues_dict))
-    files.json_dump(config.issues_result, dev_issues_dict)
+    files.json_dump(config.issues_result.format(status.replace(" ", "_")), dev_issues_dict)
+
+
+def end_is_set_and_after_search_date(issue, status, start_date):
+    return end(issue, status) and end(issue, status) >= start_date
+
+
+def end(issue, status):
+    return issue['time_in_status'].get(status, {}).get('end', None)
+
+
+def start(issue, status):
+    return issue['time_in_status'][status]['start']
+
+
+def estimation(issue, status):
+    result = issue['time_in_status'][status].get("estimation", 0.0)
+    return result if result else 0.0
 
 
 def get_issues():
     issues = list()
     for input_file in files.file_list(config.issues_parsed):
         input_json = files.safe_read_as_json(input_file, OwnDatesDecoder)
-        input_json["resolutiondate"] = input_json["resolutiondate"]
-
-        # dev
-        if input_json['summary']['dev']['start']:
-            input_json['summary']['dev']['start'] = input_json['summary']['dev']['start']
-        else:
-            input_json['summary']['dev']['start'] = datetime(year=2007, month=1, day=1, tzinfo=tz())
-
-        if input_json['summary']['dev']['end']:
-            input_json['summary']['dev']['end'] = input_json['summary']['dev']['end']
-        else:
-            input_json['summary']['dev']['end'] = datetime(year=2007, month=1, day=1, tzinfo=tz())
-
-        if input_json['summary']['dev']['sp']:
-            input_json['summary']['dev']['sp'] = float(input_json['summary']['dev']['sp'])
-        else:
-            input_json['summary']['dev']['sp'] = 0.0
-
         issues.append(input_json)
 
     return issues

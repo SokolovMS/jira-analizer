@@ -34,7 +34,7 @@ def main():
 	fetch_if_needed()
 	parse_if_needed()
 
-	analyze.gather_stats(days_back=10000)
+	analyze.gather_stats()
 
 
 if __name__ == '__main__':

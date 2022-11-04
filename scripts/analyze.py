@@ -9,7 +9,7 @@ from scripts import files
 from scripts.dates import tz, OwnDatesDecoder
 
 
-def gather_stats(days_back=None, author=None):
+def gather_stats(days_back=config.days_back, author=None):
     start_date = datetime.now(tz=tz()) - timedelta(days=days_back)
     gather_stats_main(start_date, author)
 

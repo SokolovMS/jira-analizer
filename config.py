@@ -1,14 +1,18 @@
 # Fetching block
-do_fetch = False
+do_fetch = True
 # With 'False' will only append new Issue files.
 # If smth was changed for issues from last run - better to set to 'True'
 clear_previous_fetch = False
 
 # Parsing block
-do_parse = False
+do_parse = True
 # With 'False' will only parse not parsed issues.
 # If smth was changed in parsing logic - better to set to 'True'
 clear_previous_parse = False
+
+# Analysis block
+# 'days_back' will analyze only tasks for last days (Doesn't affect fetching filter. Everything will be downloaded)
+days_back = 90
 
 # Dirs
 # Set prod=False, do_fetch=False to experiment on test data
@@ -23,9 +27,6 @@ issues_result = "issues/" + issues_suffix + "/result/people_sps_{}.json"
 # Statuses. Need to clean up
 jira_status_final = ["Released", "Cancelled", "Done", "Closed", "Deleted"]
 jira_tracked_statuses = {
-    "Analysis": {
-        "jira_estimation_field": "Analysis Estimation"
-    },
     "In Progress": {
         "jira_estimation_field": "customfield_10022"
     },
@@ -33,8 +34,3 @@ jira_tracked_statuses = {
         "jira_estimation_field": "customfield_21102"
     }
 }
-statuses_backlog_dev = ["To Do"]
-statuses_inprogress_dev = ["In Progress", "Code Review"]
-statuses_backlog_test = ["Ready for Test"]
-statuses_inprogress_test = ["In Test"]
-statuses_deploy = ["Tested", "Finish Feature", "Ready for Release", "UAT", "To deploy to Prod"]

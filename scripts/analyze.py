@@ -22,11 +22,11 @@ def gather_stats_main(start_date=None, author=None):
     if start_date:
         issues = list(filter(lambda issue: issue["resolutiondate"] is None or issue["resolutiondate"] >= start_date, issues))
 
-    if author:
-        issues = list(filter(lambda issue: issue["resolutiondate"] is None or issue["resolutiondate"] >= start_date, issues))
+    # if author:
+    #     issues = list(filter(lambda issue: issue["resolutiondate"] is None or issue["resolutiondate"] >= start_date, issues))
 
-    short_issues = list(map(lambda issue: (issue["key"], issue["resolutiondate"]), issues))
-    logging.info("Found {} issues: {}".format(len(short_issues), short_issues))
+    # short_issues = list(map(lambda issue: (issue["key"], issue["resolutiondate"]), issues))
+    # logging.info("Found {} issues: {}".format(len(short_issues), short_issues))
 
     # In progress
     # sp_status_time = analyze_dev(issues)
@@ -56,7 +56,7 @@ def gather_dev_stats(issues, start_date=None):
             issue['summary']['dev']['start'] = start_date
 
     dev_issues_list.sort(key=lambda issue: issue['summary']['dev']['start'])
-    logging.info("Found {} dev issues: {}".format(len(dev_issues_list), dev_issues_list))
+    # logging.info("Found {} dev issues: {}".format(len(dev_issues_list), dev_issues_list))
 
     dev_issues_dict = defaultdict(list)
     for issue in dev_issues_list:
@@ -80,13 +80,13 @@ def gather_dev_stats(issues, start_date=None):
             existing['issues'].append(issue)
             dev_issues_dict[assignee] = existing
 
-    logging.info("Found {} dev issues: {}".format(len(dev_issues_dict), dev_issues_dict))
+    # logging.info("Found {} dev issues: {}".format(len(dev_issues_dict), dev_issues_dict))
     files.json_dump(config.issues_result, dev_issues_dict)
 
 
 def get_issues():
     issues = list()
-    for input_file in files.file_list(config.issues_dir):
+    for input_file in files.file_list(config.issues_parsed):
         input_json = files.safe_read_as_json(input_file, OwnDatesDecoder)
         input_json["resolutiondate"] = input_json["resolutiondate"]
 

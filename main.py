@@ -14,6 +14,8 @@ def fetch_if_needed():
 
 	if config.clear_previous_fetch:
 		files.clear_dir(config.issues_rest)
+	else:
+		files.clear_dir(config.issues_rest_not_final)
 
 	download.fetch_issues()
 
@@ -23,7 +25,7 @@ def parse_if_needed():
 		return
 
 	if config.clear_previous_parse:
-		files.clear_dir(config.issues_dir)
+		files.clear_dir(config.issues_parsed)
 
 	parser.parse_everything()
 

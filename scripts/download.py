@@ -17,8 +17,10 @@ def fetch_issues():
 
     added = 0
     skipped = 0
+    in_final_status = 0
+    not_in_final_status = 0
 
-    ids = []
+    statuses = set()
     while True:
         start = initial * size
         issues = jira.search_issues(secrets.jira_query_str, start, size, expand="changelog")
@@ -28,14 +30,25 @@ def fetch_issues():
         for issue in issues:
             issue_id = issue.key
             issue_json = issue.raw
+            issue_status = issue_json['fields']['status']['name']
+            statuses.add(issue_status)
 
-            if files.file_exists("{}/{}.json".format(config.issues_rest, issue_id)):
+            if files.file_exists("{}/{}.json".format(config.issues_rest_final, issue_id)):
                 skipped += 1
                 continue
 
-            files.json_dump("{}/{}.json".format(config.issues_rest, issue_id), issue_json)
+            if issue_status in config.jira_status_final:
+                base_dir = config.issues_rest_final
+                in_final_status += 1
+            else:
+                base_dir = config.issues_rest_not_final
+                not_in_final_status += 1
+            files.json_dump("{}/{}.json".format(base_dir, issue_id), issue_json)
             added += 1
 
     logging.info("----- Fetched issues: New {}, Skipped {} -----\n".format(added, skipped))
+    logging.info("----- Saved issues: In final status {}, Not {} -----\n".format(in_final_status, not_in_final_status))
+    logging.info("Found statuses: {}".format(statuses))
+    logging.info("Known final statuses: {}".format(config.jira_status_final))
 
-    return ids
+    return added

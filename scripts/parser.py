@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from functools import cmp_to_key
+from itertools import chain
 
 import config
 from scripts import files
@@ -12,10 +13,10 @@ def parse_everything():
 
     added = 0
     skipped = 0
-    for input_file in files.file_list(config.issues_rest):
+    for input_file in chain(files.file_list(config.issues_rest_final), files.file_list(config.issues_rest_not_final)):
         skipped += 1
         issue_id = input_file.stem
-        output_file_path = "{}/{}.json".format(config.issues_dir, issue_id)
+        output_file_path = "{}/{}.json".format(config.issues_parsed, issue_id)
         if not files.file_exists(output_file_path):
             input_json = files.safe_read_as_json(input_file, decoder=JiraDatesDecoder)
             parsed = parse(input_json)

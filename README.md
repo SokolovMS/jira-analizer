@@ -25,5 +25,6 @@ python3 main.py
 
 ## Before push
 ```
+# If requirements for froject have changed:
 python3 -m pipreqs.pipreqs . --force
 ```

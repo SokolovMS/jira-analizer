@@ -1,4 +1,5 @@
 .idea/
+issues/
 /secrets.py
 
 # Byte-compiled / optimized / DLL files

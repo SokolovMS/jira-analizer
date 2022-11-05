@@ -8,7 +8,7 @@ clear_previous_fetch = False
 do_parse = True
 # With 'False' will only parse not parsed issues.
 # If smth was changed in parsing logic - better to set to 'True'
-clear_previous_parse = False
+clear_previous_parse = True
 
 # Analysis block
 # 'days_back' will analyze only tasks for last days (Doesn't affect fetching filter. Everything will be downloaded)

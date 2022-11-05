@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from datetime import timedelta
 from functools import cmp_to_key
 from itertools import chain
 
@@ -45,16 +46,35 @@ def parse(input_json):
     return result
 
 
+def how_long_was_assigned(time_in_status, prev_status, assignee, assignee_transition_date):
+    if not prev_status or not time_in_status[prev_status]:
+        return
+
+    prev_end = time_in_status[prev_status].get("end", assignee_transition_date)
+
+    if 'assignees' not in time_in_status[prev_status]:
+        time_in_status[prev_status]['assignees'] = {}
+    if assignee not in time_in_status[prev_status]['assignees']:
+        time_in_status[prev_status]['assignees'][assignee] = timedelta(days=0)
+
+    time_in_status[prev_status]['assignees'][assignee] += (assignee_transition_date - prev_end)
+    time_in_status[prev_status]['end'] = assignee_transition_date
+
+
 def compute_time_in_status(changelog):
     time_in_status = defaultdict(dict)
     prev_status = None
     prev_transition_date = None
     assignee = None
     for item in changelog:
+        if not config.prod:
+            logging.debug("Processing item: {}".format(item))
+
         # Working with 'assignee' changelog item
         if item['field'] == "assignee":
             assignee = item['toString']
-            update_assignee(time_in_status, prev_status, assignee)
+            assignee_transition_date = item['date']
+            how_long_was_assigned(time_in_status, prev_status, assignee, assignee_transition_date)
             continue
 
         # Working with 'status' changelog item
@@ -63,27 +83,28 @@ def compute_time_in_status(changelog):
         curr_transition_date = item['date']
         date_diff = curr_transition_date - prev_transition_date if prev_transition_date else None
 
+        how_long_was_assigned(time_in_status, prev_status, assignee, curr_transition_date)
         update_dt(time_in_status, prev_status, date_diff)
         update_end(time_in_status, prev_status, curr_transition_date)
 
         update_start(time_in_status, curr_status, curr_transition_date)
-        update_dt(time_in_status, curr_status, date_diff)
-        update_assignee(time_in_status, curr_status, assignee)
+        update_end(time_in_status, curr_status, curr_transition_date)
 
         prev_status = curr_status
         prev_transition_date = curr_transition_date
 
-    for key in time_in_status:
-        ass_set = time_in_status[key].get("assignee", set())
-        ass_set.discard(None)
-        time_in_status[key]["assignee"] = ass_set
-        if len(time_in_status[key]["assignee"]) == 0:
-            time_in_status[key]["assignee"] = "None"
-        elif len(time_in_status[key]["assignee"]) == 1:
-            time_in_status[key]["assignee"] = time_in_status[key]["assignee"].pop()
-        # else:
-        #     time_in_status[key]["assignee"] = time_in_status[key]["assignee"]
+    for status in time_in_status:
+        time_in_status[status]["assignee"] = get_longest_assignee(time_in_status, status)
+
     return time_in_status
+
+
+def get_longest_assignee(time_in_status, status):
+    if "assignees" not in time_in_status[status]:
+        return None
+
+    assignees = time_in_status[status]["assignees"]
+    return max(assignees, key=assignees.get)
 
 
 def get_sorted_changelog(input_json):
@@ -115,12 +136,6 @@ def get_sorted_changelog(input_json):
         if assignee_item:
             changelog.append(assignee_item)
     changelog = sorted(changelog, key=cmp_to_key(custom_compare))
-    # changelog.insert(0, {
-    #     "field": "assignee",
-    #     "fromString": None,
-    #     "toString": next((x["fromString"] for x in changelog if x["field"] == "assignee"), None),
-    #     "date": next((x["date"] for x in changelog if x["date"]), None)
-    # })
     return changelog
 
 
@@ -153,8 +168,17 @@ def update_assignee(time_in_status, status, assignee):
         return
 
     current = time_in_status.get(status, {}).get("assignee", set())
+
+    if not config.prod:
+        if status == "In Progress":
+            logging.debug("Updating assignee. Before: {}".format(current))
+
     current.add(assignee)
     time_in_status[status]["assignee"] = current
+
+    if not config.prod:
+        if status == "In Progress":
+            logging.debug("Updating assignee. After: {}".format(time_in_status[status]["assignee"]))
 
 
 def custom_compare(changelog_item1, changelog_item2):
@@ -163,10 +187,11 @@ def custom_compare(changelog_item1, changelog_item2):
     elif changelog_item1['date'] > changelog_item2['date']:
         return 1
 
+    # Assignee changes after status changes
     if changelog_item1['field'] == 'assignee':
-        return -1
-    elif changelog_item2['field'] == 'assignee':
         return 1
+    elif changelog_item2['field'] == 'assignee':
+        return -1
 
     return 0
 
